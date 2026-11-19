@@ -17,6 +17,51 @@ fi
 ../magiskboot cpio "$ramdisk" extract
 test -f system/bin/recovery
 
+# ---------------------------------------------------------------------------
+# Collect the model/firmware of the recovery being patched, for the release
+# ---------------------------------------------------------------------------
+prop_get() {
+    local file value
+    while IFS= read -r file; do
+        value=$(awk -v k="$1" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "$file")
+        if [ -n "$value" ]; then
+            printf '%s' "$value"
+            return 0
+        fi
+    done < <(find . -type f \( -name '*.prop' -o -name 'prop.default' \) | sort)
+    return 1
+}
+
+or_unknown() {
+    if [ -n "$1" ]; then printf '%s' "$1"; else printf 'unknown'; fi
+}
+
+recovery_model=$(prop_get ro.product.model || true)
+recovery_device=$(or_unknown "$(prop_get ro.product.device || true)")
+recovery_firmware=$(prop_get ro.build.display.id || true)
+if [ -z "$recovery_firmware" ]; then
+    recovery_firmware=$(prop_get ro.build.version.incremental || true)
+fi
+recovery_firmware=$(or_unknown "$recovery_firmware")
+recovery_android=$(or_unknown "$(prop_get ro.build.version.release || true)")
+recovery_fingerprint=$(or_unknown "$(prop_get ro.build.fingerprint || true)")
+# Some recovery prop files only carry the fingerprint
+if [ -z "$recovery_model" ] && [ "$recovery_fingerprint" != unknown ]; then
+    recovery_model=$(printf '%s' "$recovery_fingerprint" | cut -d/ -f2)
+fi
+recovery_model=$(or_unknown "$recovery_model")
+
+{
+    printf 'RECOVERY_MODEL=%s\n' "$recovery_model"
+    printf 'RECOVERY_DEVICE=%s\n' "$recovery_device"
+    printf 'RECOVERY_FIRMWARE=%s\n' "$recovery_firmware"
+    printf 'RECOVERY_ANDROID=%s\n' "$recovery_android"
+    printf 'RECOVERY_FINGERPRINT=%s\n' "$recovery_fingerprint"
+} > ../recovery-info.env
+
+printf 'recovery info: model=%s device=%s firmware=%s android=%s\n' \
+    "$recovery_model" "$recovery_device" "$recovery_firmware" "$recovery_android"
+
 cp system/bin/recovery recovery.orig
 
 # Try a patch; a non-matching pattern is not an error (patterns are per-firmware)

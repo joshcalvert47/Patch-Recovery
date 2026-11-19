@@ -11,6 +11,7 @@ This CI service patches recovery images of Samsung to enable Fastbootd. Based on
 - Head over to Actions tab. Click on RECOVERY -> Run workflow. Insert the copied URL in the RECOVERY URL field and Start the workflow
 - The Patching process will start
 - A Patched-Recovery.zip will be uploaded at the end of the process. Download it and extract your patched recovery image. The Image will already also be repacked to .tar for flashing directly through Odin
+- The release is titled with the model and firmware version read from the recovery image (e.g. `Patched-Recovery SM-A515F A515FXXU4DUL9`), and its notes list the model, device, firmware, Android version and build fingerprint
 ![](https://s3.bmp.ovh/imgs/2022/04/19/91ef3a3ee9255e9c.png)
 - Flash vbmeta_disabled_r if needed
 

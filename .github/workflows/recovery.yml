@@ -57,9 +57,32 @@ jobs:
           )
           ls -lh output/fastbootd-recovery.tar.md5
 
+      - name: Read recovery metadata
+        run: |
+          set -euo pipefail
+          cat recovery-info.env
+          grep -v '^$' recovery-info.env >> "$GITHUB_ENV"
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v2
         with:
           files: output/*.md5
-          name: Patched-Recovery
+          name: Patched-Recovery ${{ env.RECOVERY_MODEL }} ${{ env.RECOVERY_FIRMWARE }}
+          body: |
+            Patched recovery for **${{ env.RECOVERY_MODEL }}** (`${{ env.RECOVERY_DEVICE }}`)
+
+            | Field | Value |
+            | --- | --- |
+            | Model | `${{ env.RECOVERY_MODEL }}` |
+            | Device | `${{ env.RECOVERY_DEVICE }}` |
+            | Firmware | `${{ env.RECOVERY_FIRMWARE }}` |
+            | Android version | `${{ env.RECOVERY_ANDROID }}` |
+            | Fingerprint | `${{ env.RECOVERY_FINGERPRINT }}` |
+
+            Enabled in this image: fastbootd (fastboot in recovery) and root adb (`adb root` / root `adb shell`).
+
+            ```
+            ODIN AP Slot: fastbootd-recovery.tar.md5
+            ODIN User Slot: vbmeta_disabled_r.tar
+            ```
           tag_name: ${{ github.run_id }}
