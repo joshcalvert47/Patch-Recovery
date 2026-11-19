@@ -20,7 +20,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y git wget lz4 tar openssl python3
+          sudo apt-get install -y file git wget lz4 tar openssl python3
 
       - name: Fetch image from URL
         run: |
@@ -31,13 +31,13 @@ jobs:
 
       - name: Patch Process-1
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           chmod +x script1.sh magiskboot
           ./script1.sh recovery.img
 
       - name: Patch Process-2
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           chmod +x script2.sh
           ./script2.sh
           python3 avbtool extract_public_key --key phh.pem --output phh.pub.bin
