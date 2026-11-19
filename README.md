@@ -19,6 +19,9 @@ ODIN AP Slot: Recovery.tar.md5
 ODIN User Slot: vbmeta_disabled_r.tar
 ```
 
+# Root adb in recovery
+The patched recovery also allows `adb root` / a root `adb shell` while booted into recovery. The script sets `ro.secure=0`, `ro.debuggable=1`, `ro.adb.secure=0` and `service.adb.root=1` in the ramdisk props, hooks the `adbd` service in the ramdisk init rc, and patches `adbd` so it does not drop to the `shell` user. This only affects adb inside recovery, it does not root the installed system.
+
 # Important note
 - Make sure that the uploaded file can downloaded with wget command and will download a correct file. Nextcloud with public link works fine if you open the link on web and copy the url from the download button.
 

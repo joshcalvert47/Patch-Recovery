@@ -28,6 +28,24 @@ patch_hex() {
     fi
 }
 
+patch_hex_file() {
+    if ../magiskboot hexpatch "$1" "$2" "$3"; then
+        echo "MATCHED: $2 ($1)"
+    else
+        echo "no match: $2 ($1)"
+    fi
+}
+
+# Files edited outside system/bin/recovery, re-added to the cpio when repacking
+changed_files=""
+remember_file() {
+    changed_files="$changed_files $1"
+}
+
+file_mode() {
+    stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"
+}
+
 # Reverse fastbootd ENG mode check
 patch_hex e10313aaf40300aa6ecc009420010034 e10313aaf40300aa6ecc0094
 patch_hex eec3009420010034 eec3009420010035
@@ -56,9 +74,113 @@ if cmp -s recovery.orig system/bin/recovery; then
     exit 1
 fi
 
-../magiskboot cpio "$ramdisk" \
-  'rm system/bin/recovery' \
-  'add 0755 system/bin/recovery system/bin/recovery'
+# ---------------------------------------------------------------------------
+# Enable root adb in recovery: `adb root` works and `adb shell` is a root shell
+# ---------------------------------------------------------------------------
+adb_root_enabled=0
+
+# <file> <key> <value>: replace the key in place, or append it
+set_prop() {
+    local file="$1" key="$2" value="$3"
+    local key_re="${key//./\\.}"
+    if grep -q "^${key_re}=" "$file"; then
+        sed -i.sed.bak "s|^${key_re}=.*|${key}=${value}|" "$file"
+        rm -f "$file.sed.bak"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$file"
+    fi
+}
+
+# ro.debuggable allows `adb root`, ro.secure keeps it root by default,
+# ro.adb.secure=0 skips adb key auth and service.adb.root=1 starts it as root
+while IFS= read -r prop; do
+    [ -L "$prop" ] && continue
+    cp "$prop" "$prop.adbroot.bak"
+    set_prop "$prop" ro.secure 0
+    set_prop "$prop" ro.debuggable 1
+    set_prop "$prop" ro.adb.secure 0
+    set_prop "$prop" persist.service.adb.enable 1
+    set_prop "$prop" service.adb.root 1
+    if cmp -s "$prop.adbroot.bak" "$prop"; then
+        rm -f "$prop.adbroot.bak"
+        echo "adb root: $prop already set"
+        adb_root_enabled=1
+        continue
+    fi
+    rm -f "$prop.adbroot.bak"
+    echo "adb root: patched $prop"
+    remember_file "$prop"
+    adb_root_enabled=1
+done < <(find . -type f \( -name prop.default -o -name default.prop \) | sort)
+
+# adbd only starts in recovery from `on property:ro.debuggable=1`, and only stays
+# root with service.adb.root=1, so hook both triggers in the rc that owns adbd
+adb_rc=""
+while IFS= read -r rc; do
+    if [ ! -L "$rc" ] && grep -q '^service adbd ' "$rc"; then
+        adb_rc="$rc"
+        break
+    fi
+done < <(find . -type f -name '*.rc' | sort)
+
+if [ -n "$adb_rc" ]; then
+    if grep -q 'Patch-Recovery: root adb' "$adb_rc"; then
+        echo "adb root: $adb_rc already hooked"
+        adb_root_enabled=1
+    else
+        # Restarting adbd is only needed when the rc has no restart trigger of its own
+        have_restart=0
+        if grep -q 'on property:service\.adb\.root=1' "$adb_rc"; then
+            have_restart=1
+        fi
+        {
+            echo
+            echo '# Patch-Recovery: root adb in recovery (`adb root` / root `adb shell`)'
+            echo 'on property:ro.debuggable=1'
+            echo '    setprop service.adb.root 1'
+            if [ "$have_restart" = 0 ]; then
+                echo
+                echo 'on property:service.adb.root=1'
+                echo '    restart adbd'
+            fi
+        } >> "$adb_rc"
+        echo "adb root: hooked adbd in $adb_rc"
+        remember_file "$adb_rc"
+        adb_root_enabled=1
+    fi
+else
+    echo "WARNING: no rc file defining 'service adbd'; cannot hook root adb" >&2
+fi
+
+# A user-build adbd drops from root to uid/gid 2000 (shell) before it even looks
+# at those props. Turn that argument into 0 so the daemon stays root (arm64).
+for adbd in system/bin/adbd sbin/adbd; do
+    [ -f "$adbd" ] || continue
+    cp "$adbd" "$adbd.adbroot.bak"
+    patch_hex_file "$adbd" 01fa8052 01008052 # mov w1, #0x7d0 -> mov w1, #0
+    patch_hex_file "$adbd" 00fa8052 00008052 # mov w0, #0x7d0 -> mov w0, #0
+    if cmp -s "$adbd.adbroot.bak" "$adbd"; then
+        echo "adb root: adbd privilege drop not found in $adbd (props only)"
+    else
+        echo "adb root: patched adbd privilege drop in $adbd"
+        remember_file "$adbd"
+        adb_root_enabled=1
+    fi
+    rm -f "$adbd.adbroot.bak"
+done
+
+if [ "$adb_root_enabled" = 1 ]; then
+    echo "adb root: enabled in recovery (adb root / adb shell as root)"
+else
+    echo "WARNING: could not enable adb root in this recovery ramdisk" >&2
+fi
+
+cpio_args=('rm system/bin/recovery' 'add 0755 system/bin/recovery system/bin/recovery')
+for f in $changed_files; do
+    f="${f#./}"
+    cpio_args+=("rm $f" "add $(file_mode "$f") $f $f")
+done
+../magiskboot cpio "$ramdisk" "${cpio_args[@]}"
 
 if [ "$ramdisk" != "ramdisk.cpio" ]; then
     cp "$ramdisk" ramdisk.cpio
