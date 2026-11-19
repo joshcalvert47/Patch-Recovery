@@ -15,6 +15,7 @@ elif [ -f vendor_ramdisk_recovery.cpio ]; then
 fi
 
 ../magiskboot cpio "$ramdisk" extract
+test -f system/bin/recovery
 
 # Reverse fastbootd ENG mode check
 ../magiskboot hexpatch system/bin/recovery e10313aaf40300aa6ecc009420010034 e10313aaf40300aa6ecc0094
@@ -29,17 +30,19 @@ fi
 ../magiskboot hexpatch system/bin/recovery 24f0fcee30b1681c 24f0fcee30b9681c
 ../magiskboot hexpatch system/bin/recovery 27f02eeb30b1681c 27f02eeb30b9681c
 ../magiskboot hexpatch system/bin/recovery b4f082ee28b1701c b4f082ee28b970c1
-../magiskboot hexpatch system/bin/recovery 9ef0f4ec28b1701c 9ef0f4ec28b9701c
-../magiskboot hexpatch system/bin/recovery 9ef00ced28b1701c 9ef00ced28b9701c
+../magiskboot hexpatch system/bin/recovery 9ef0f4ec28b1701c 9ef0f4ec28b970c1
+../magiskboot hexpatch system/bin/recovery 9ef00ced28b1701c 9ef00ced28b970c1
 ../magiskboot hexpatch system/bin/recovery 2001597ae0000054 2001597ae1000054
 ../magiskboot hexpatch system/bin/recovery 2001597ac0000054 2001597ac1000054
-../magiskboot hexpatch system/bin/recovery 9ef0fcec28b1701c 9ef0fced28b9701c
-../magiskboot hexpatch system/bin/recovery 9ef00ced28b1701c 9ef00ced28b9701c
+../magiskboot hexpatch system/bin/recovery 9ef0fcec28b1701c 9ef0fced28b970c1
+../magiskboot hexpatch system/bin/recovery 9ef00ced28b1701c 9ef00ced28b970c1
 ../magiskboot hexpatch system/bin/recovery 24f0f2ea30b1681c 24f0f2ea30b9681c
 ../magiskboot hexpatch system/bin/recovery e0031f2a8e000014 200080528e000014
 ../magiskboot hexpatch system/bin/recovery 41010054a0020012f44f48a9 4101005420008052f44f48a9
 
-../magiskboot cpio "$ramdisk" 'add 0755 system/bin/recovery system/bin/recovery'
+../magiskboot cpio "$ramdisk" \
+  'rm system/bin/recovery' \
+  'add 0755 system/bin/recovery system/bin/recovery'
 
 if [ "$ramdisk" != "ramdisk.cpio" ]; then
     cp "$ramdisk" ramdisk.cpio
